@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import itertools
 import os
 
@@ -24,11 +25,10 @@ def find_begin(df) -> list:
 		elif item < len_df - 1:
 			res_qnt = check_sigh(df.Quant[item], df.Quant[item + 1])
 			if df['Date'][item] == df['Date'][item + 1]:
-				if df['Time'][item] != df['Time'][item - 1]:
-					if df['Time'][item] == df['Time'][item + 1]:
-						if res_qnt or df['Summ'][item - 1] == 0:
-							if df['Quant'][item] + df['Quant'][item + 1] != 0:
-								list_begin.append(item)
+				if df['Time'][item] == df['Time'][item + 1]:
+					if res_qnt:
+						# if df['Summ'][item - 1] == 0:
+						list_begin.append(item)
 	return list_begin
 
 
@@ -40,9 +40,8 @@ def find_end(df) -> list:
 			result_quant = check_sigh(df.Quant[item], df.Quant[item - 1])
 			if df['Date'][item] == df['Date'][item - 1]:
 				if df['Time'][item] == df['Time'][item - 1]:
-					if df['Time'][item] != df['Time'][item + 1] or df['Summ'][item - 1] == 0:
-						if result_quant:
-							list_end.append(item)
+					if result_quant or df['Summ'][item - 1] == 0:
+						list_end.append(item)
 		elif item == df.index.values.max():
 			result = check_sigh(df.Quant[item], df.Quant[item - 1])
 			if df['Date'][item] == df['Date'][item - 1]:
@@ -64,58 +63,71 @@ def check_lists(_list1, _list2) -> bool:
 
 def load_file(file_name):
 	"""Главная функция"""
+	# SettingWithCopyWarning in Pandas
+	pd.options.mode.chained_assignment = None
 	source = pd.read_csv(file_name, sep=";")
+	source['Type'] = ''
 	source['New_Price'] = source['Price']
 	source['New_Quant'] = source['Quant']
 	source['VW'] = source['Price'] * source['Quant']
 	source['VWAP'] = source['VW']
+	source.insert(2, 'Type', source.pop('Type'))
 	
-	# df = pd.DataFrame()
-	# df['Date'] = source['Date']
-	# df['Time'] = source['Time']
-	
-	list_begin = find_begin(source)
-	list_end = find_end(source)
-	if check_lists(list_begin, list_end):
-		if len(list_begin) == len(list_end):
-			merged_list = list(zip(list_begin, list_end))
+	for item in range(source.index.size):
+		if source['Quant'][item] > 0:
+			source['Type'][item] = 'Buy'
 		else:
-			len_min = min(len(list_begin), len(list_end))
-			merged_list = list(zip(list_begin[:len_min], list_end[:len_min]))
-	else:
-		exit("Невозможно разделить сделки! Измените код!")
+			source['Type'][item] = 'Sell'
 	
-	print(merged_list)
+	source_new = source.duplicated(subset=['Date', 'Time', 'Type'])
+	begin_list = []
+	end_list = []
+	for row, number in enumerate(source_new):
+		if number == True and source_new[row - 1] == False:
+			begin_list.append(row - 1)
+	
+	for row, number in enumerate(source_new):
+		if number == True and source_new[row + 1] == False:
+			end_list.append(row)
+	
+	if len(begin_list) == len(end_list) and len(begin_list) > 0:
+		merged_list = list(zip(begin_list, end_list))
+	else:
+		exit("Списки не совпадают! Пишите программисту для исправления кода!")
 	
 	for item in merged_list:
 		for num in source.index:
 			if num >= item[0] and num <= item[1]:
-				one_deal = source.at[item[0], 'Quant'] + source.at[item[1], 'Quant']
-				if item[1] - item[0] == 1 and one_deal == 0:
-					source.at[num, 'New_Quant'] = source.at[num, 'Quant']
-					source.at[num, 'VWAP'] = source.at[num, 'VW']
-					source.at[num, 'New_Price'] = source.at[num, 'Price']
+				_end = item[1] + 1
+				new_quant = source['Quant'][item[0]:_end].groupby(level=0).sum()
+				new_summ = source['VW'][item[0]:_end].groupby(level=0).sum()
+				if new_quant.sum() != 0:
+					new_price = new_summ.sum() / new_quant.sum()
 				else:
-					summ = source.loc[source.index[item[0]:item[1] + 1]].VW
-					quant = source.loc[source.index[item[0]:item[1] + 1]].Quant
-					if quant.sum() != 0:
-						vwap = summ.sum() / quant.sum()
-					else:
-						vwap = summ.sum()
-					source.at[num, 'New_Quant'] = int(quant.sum())
-					source.at[num, 'VWAP'] = float("{:.2f}".format(vwap))
-					source.at[num, 'New_Price'] = source.at[num, 'VWAP']
-	
+					new_price = new_summ.sum()
+				
+				source.at[num, 'New_Quant'] = int(new_quant.sum())
+				source.at[num, 'VWAP'] = float("{:.2f}".format(new_price))
+				source.at[num, 'New_Price'] = source.at[num, 'VWAP']
+			
 	new_list_del = make_new_list(merged_list)
 	new_source = source.drop(index=new_list_del)
-	result = new_source[['Date', 'Time', 'Tiker', 'New_Price', 'New_Quant']]
-	save_file(file_name.split('\\')[-1][:-4], result)
-	print(result)
-
-
-def save_file(_file, df):
-	name_file = os.getcwd() + '\\' + _file + '_lchi.csv'
-	df.to_csv(name_file, sep=';', index=False, header=True)
+	result = new_source[['Date', 'Time', 'Tiker', 'Type', 'New_Price', 'New_Quant']]
+	result = result.rename(columns={'New_Price': 'Price', 'New_Quant': 'Quant'})
+	
+	new_summ = []
+	new_summ.append(result['Quant'].values[0])
+	for n, item in enumerate(result['Tiker']):
+		if n > 0:
+			if item == result['Tiker'].values[n - 1]:
+				total = result['Quant'].values[n] + new_summ[n - 1]
+				new_summ.append(total)
+			elif item != result['Tiker'].values[n - 1]:
+				new_summ.append(source['Quant'].values[n])
+	
+	result["Summ"] = new_summ
+	result.to_csv(file_name[:-4] + '_agr.csv', sep=':', index=False, header=True)
+	print(result.head(4))
 
 
 def make_new_list(merged_list) -> list:
@@ -132,8 +144,26 @@ def make_new_list(merged_list) -> list:
 	return merged
 
 
+def make_list_files(names):
+	list_file = []
+	path_name = os.getcwd() + '\\' + names + '\\'
+	for item in os.listdir(path=names):
+		if item[-3:] == 'csv' and len(item) < 10:
+			list_file.append(path_name + item)
+	return list_file
+
+
 if __name__ == '__main__':
-	# name = input("Введите имя фала без расширения:\n")
-	name = 'ALZ2'
-	name_file = os.path.abspath(name) + '.csv'
-	load_file(name_file)
+	name = input("Введите имя папки или имя файла:\n")
+	if name[-4:-3] == '.':
+		if name[-3:] == 'csv':
+			load_file(os.getcwd() + '\\' + name)
+		else:
+			print(f"Такого файла {os.path.abspath(name)} не существует")
+	else:
+		if os.path.exists(name):
+			list_files = make_list_files(name)
+			for file in list_files:
+				load_file(file)
+		else:
+			print(f"Такой папки {os.path.abspath(name)} не существует")
