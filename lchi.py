@@ -28,7 +28,7 @@ def load_file(file_name):
 	time = source['Time'].str.split('.', expand=True)
 	time.columns = ['Time', 'Time2']
 	source['Time'] = time['Time']
-	save_file(source, main_dir, new_dir, name)
+	# save_file(source, main_dir, new_dir, name)
 	
 	tickers = sorted(source['Tiker'].unique().tolist())
 	source = source.groupby(['Date', 'Time', 'Tiker', 'Price'], as_index=False)['Quant'].sum()
@@ -46,15 +46,22 @@ def load_file(file_name):
 	
 	# Добавление новой колонки и сохранение результата в файл
 	source['Summ'] = new_summ
-	source['Money'] = source['Quant'] * source['Price']
+	# source['Money'] = source['Quant'] * source['Price']
 	common_file = main_dir + new_dir + '\\' + new_name
 	source.to_csv(common_file, header=True, index=False, encoding='utf-8', sep=';')
+	split_to_files(common_file, tickers)
 	
-	# Разбиение по тикерам и сохранение в отдельный файл
-	for item in tickers:
-		df = source[np.logical_not(source['Tiker'] != item)]
-		newfile = main_dir + new_dir + '\\' + item + '.csv'
+	
+def split_to_files(file, stocks):
+	""" Разбиение по тикерам и сохранение в отдельные файлы """
+	source = pd.read_csv(file, sep=';')
+	dir_name = os.path.dirname(file) + '\\'
+	for stock in stocks:
+		#df = df[np.logical_not(df['Tiker'] != item)]
+		df = source.loc[source['Tiker'] == stock]
+		newfile = dir_name + stock + '.csv'
 		df.to_csv(newfile, header=True, index=False, encoding='utf-8', sep=';')
+		print(f'Создан файл {newfile}')
 
 
 if __name__ == '__main__':

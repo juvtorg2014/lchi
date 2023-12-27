@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import itertools
 import os
 
@@ -52,6 +51,7 @@ def find_end(df) -> list:
 
 
 def check_lists(_list1, _list2) -> bool:
+	"""Проверка списков на непересечение границ блоков"""
 	merged_list = list(zip(_list1, _list2))
 	for i, item in enumerate(merged_list):
 		if i > 0:
@@ -65,7 +65,9 @@ def load_file(file_name):
 	"""Главная функция"""
 	# SettingWithCopyWarning in Pandas
 	pd.options.mode.chained_assignment = None
-	source = pd.read_csv(file_name, sep=";")
+	data = pd.read_csv(file_name, sep=";")
+	source = data.dropna(axis=0, how='any')
+	
 	source['Type'] = ''
 	source['New_Price'] = source['Price']
 	source['New_Quant'] = source['Quant']
@@ -82,19 +84,35 @@ def load_file(file_name):
 	source_new = source.duplicated(subset=['Date', 'Time', 'Type'])
 	begin_list = []
 	end_list = []
-	for row, number in enumerate(source_new):
-		if number == True and source_new[row - 1] == False:
-			begin_list.append(row - 1)
 	
-	for row, number in enumerate(source_new):
-		if number == True and source_new[row + 1] == False:
-			end_list.append(row)
 	
-	if len(begin_list) == len(end_list) and len(begin_list) > 0:
-		merged_list = list(zip(begin_list, end_list))
+	for row_beg, num_beg in enumerate(source_new):
+		if row_beg  != source_new.shape[0]:
+			if num_beg and not source_new[row_beg - 1]:
+				begin_list.append(row_beg - 1)
+	
+	for row_end, num_end in enumerate(source_new):
+		if row_end == source_new.shape[0] - 1:
+			if num_end:
+				end_list.append(row_end)
+		else:
+			if num_end and not source_new[row_end + 1]:
+				end_list.append(row_end)
+				
+				
+	if len(begin_list) == len(end_list):
+		if len(begin_list) > 0:
+			merged_list = list(zip(begin_list, end_list))
+			make_file(source, merged_list, file_name)
+		else:
+			source.to_csv(file_name[:-4] + '_agr.csv', sep=';', index=False, header=True)
+			print(f"У файла {file_name} нет агрегированных сделок!")
 	else:
 		exit("Списки не совпадают! Пишите программисту для исправления кода!")
-	
+
+
+def make_file(source, merged_list, name):
+	"""Окончательная сборка данных и созранение в файл"""
 	for item in merged_list:
 		for num in source.index:
 			if num >= item[0] and num <= item[1]:
@@ -109,7 +127,7 @@ def load_file(file_name):
 				source.at[num, 'New_Quant'] = int(new_quant.sum())
 				source.at[num, 'VWAP'] = float("{:.2f}".format(new_price))
 				source.at[num, 'New_Price'] = source.at[num, 'VWAP']
-			
+	
 	new_list_del = make_new_list(merged_list)
 	new_source = source.drop(index=new_list_del)
 	result = new_source[['Date', 'Time', 'Tiker', 'Type', 'New_Price', 'New_Quant']]
@@ -126,8 +144,8 @@ def load_file(file_name):
 				new_summ.append(source['Quant'].values[n])
 	
 	result["Summ"] = new_summ
-	result.to_csv(file_name[:-4] + '_agr.csv', sep=':', index=False, header=True)
-	print(result.head(4))
+	result.to_csv(name[:-4] + '_agr.csv', sep=':', index=False, header=True)
+	print(result.tail(2))
 
 
 def make_new_list(merged_list) -> list:
@@ -144,7 +162,8 @@ def make_new_list(merged_list) -> list:
 	return merged
 
 
-def make_list_files(names):
+def make_list_files(names) -> list:
+	"""Создание списка файлов"""
 	list_file = []
 	path_name = os.getcwd() + '\\' + names + '\\'
 	for item in os.listdir(path=names):
@@ -155,8 +174,8 @@ def make_list_files(names):
 
 if __name__ == '__main__':
 	name = input("Введите имя папки или имя файла:\n")
-	if name[-4:-3] == '.':
-		if name[-3:] == 'csv':
+	if name[-4:-3] == '.' and len(name) < 10:
+		if name[-3:].upper() == 'CSV':
 			load_file(os.getcwd() + '\\' + name)
 		else:
 			print(f"Такого файла {os.path.abspath(name)} не существует")
