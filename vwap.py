@@ -55,7 +55,6 @@ def check_lists(_list1, _list2) -> bool:
 	merged_list = list(zip(_list1, _list2))
 	for i, item in enumerate(merged_list):
 		if i > 0:
-			last = item[1]
 			if item[1] < item[0] and item[0] <= merged_list[i - 1][1]:
 				return False
 	return True
@@ -85,7 +84,6 @@ def load_file(file_name):
 	begin_list = []
 	end_list = []
 	
-	
 	for row_beg, num_beg in enumerate(source_new):
 		if row_beg  != source_new.shape[0]:
 			if num_beg and not source_new[row_beg - 1]:
@@ -98,7 +96,6 @@ def load_file(file_name):
 		else:
 			if num_end and not source_new[row_end + 1]:
 				end_list.append(row_end)
-				
 				
 	if len(begin_list) == len(end_list):
 		if len(begin_list) > 0:
@@ -133,19 +130,24 @@ def make_file(source, merged_list, name):
 	result = new_source[['Date', 'Time', 'Tiker', 'Type', 'New_Price', 'New_Quant']]
 	result = result.rename(columns={'New_Price': 'Price', 'New_Quant': 'Quant'})
 	
-	new_summ = []
-	new_summ.append(result['Quant'].values[0])
-	for n, item in enumerate(result['Tiker']):
-		if n > 0:
-			if item == result['Tiker'].values[n - 1]:
-				total = result['Quant'].values[n] + new_summ[n - 1]
-				new_summ.append(total)
-			elif item != result['Tiker'].values[n - 1]:
-				new_summ.append(source['Quant'].values[n])
-	
+	new_summ = count_summ(result)
 	result["Summ"] = new_summ
 	result.to_csv(name[:-4] + '_agr.csv', sep=':', index=False, header=True)
 	print(result.tail(2))
+	
+	
+def count_summ(df) -> list:
+	"""Подсчет сумм сделок для новой колонки"""
+	_summ = []
+	_summ.append(df['Quant'].values[0])
+	for num, item in enumerate(df['Tiker']):
+		if num > 0:
+			if item == df['Tiker'].values[num - 1]:
+				total = df['Quant'].values[num] + _summ[num - 1]
+				_summ.append(total)
+			elif item != df['Tiker'].values[num - 1]:
+				_summ.append(df['Quant'].values[num])
+	return _summ
 
 
 def make_new_list(merged_list) -> list:

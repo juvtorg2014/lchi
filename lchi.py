@@ -1,12 +1,10 @@
 import pandas as pd
-import numpy as np
 import os
 
 
-def save_file(source, main, new, name):
-	with open(name_file) as fw:
-		common_file = main + new + '\\' + name + '.csv'
-		source.to_csv(common_file, header=True, index=False, encoding='utf-8', sep=';')
+def save_file(source, main, new, old_name):
+	common_file = main + new + '\\' + old_name + '.csv'
+	source.to_csv(common_file, header=True, index=False, encoding='utf-8', sep=';')
 
 
 def load_file(file_name):
@@ -34,16 +32,7 @@ def load_file(file_name):
 	source = source.groupby(['Date', 'Time', 'Tiker', 'Price'], as_index=False)['Quant'].sum()
 	source = source.sort_values(by=['Tiker', 'Date', 'Time'])
 	
-	new_summ = []
-	new_summ.append(source['Quant'].values[0])
-	for n, item in enumerate(source['Tiker']):
-		if n > 0:
-			if item == source['Tiker'].values[n - 1]:
-				total = source['Quant'].values[n] + new_summ[n - 1]
-				new_summ.append(total)
-			elif item != source['Tiker'].values[n - 1]:
-				new_summ.append(source['Quant'].values[n])
-	
+	new_summ = count_summ(source)
 	# Добавление новой колонки и сохранение результата в файл
 	source['Summ'] = new_summ
 	# source['Money'] = source['Quant'] * source['Price']
@@ -52,12 +41,25 @@ def load_file(file_name):
 	split_to_files(common_file, tickers)
 	
 	
+def count_summ(df) -> list:
+	"""Подсчет сумм сделок для новой колонки"""
+	_summ = []
+	_summ.append(df['Quant'].values[0])
+	for num, item in enumerate(df['Tiker']):
+		if num > 0:
+			if item == df['Tiker'].values[num - 1]:
+				total = df['Quant'].values[num] + _summ[num - 1]
+				_summ.append(total)
+			elif item != df['Tiker'].values[num - 1]:
+				_summ.append(df['Quant'].values[num])
+	return _summ
+	
+	
 def split_to_files(file, stocks):
 	""" Разбиение по тикерам и сохранение в отдельные файлы """
 	source = pd.read_csv(file, sep=';')
 	dir_name = os.path.dirname(file) + '\\'
 	for stock in stocks:
-		#df = df[np.logical_not(df['Tiker'] != item)]
 		df = source.loc[source['Tiker'] == stock]
 		newfile = dir_name + stock + '.csv'
 		df.to_csv(newfile, header=True, index=False, encoding='utf-8', sep=';')
