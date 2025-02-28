@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import os
 
 
@@ -26,18 +27,24 @@ def load_file(file_name):
 	time = source['Time'].str.split('.', expand=True)
 	time.columns = ['Time', 'Time2']
 	source['Time'] = time['Time']
+	source['Deal'] = np.where(source['Quant'] > 0, 'Long', 'Short')
 	# save_file(source, main_dir, new_dir, name)
 	
 	tickers = sorted(source['Tiker'].unique().tolist())
-	source = source.groupby(['Date', 'Time', 'Tiker', 'Price'], as_index=False)['Quant'].sum()
-	source = source.sort_values(by=['Tiker', 'Date', 'Time'])
+	source = source.groupby(['Date', 'Time', 'Tiker', 'Price', 'Deal'], as_index=False)['Quant'].sum()
+	df = source.sort_values(by=['Tiker', 'Date', 'Time'])
+
+	# Группировка сделок по времени и направлению
+	new_df = df.groupby(['Date', 'Time', 'Tiker', 'Deal'], as_index=False).agg({'Price':'mean', 'Quant':'sum'})
+	new_df = new_df.sort_values(by=['Tiker', 'Date', 'Time'])
 	
-	new_summ = count_summ(source)
+	new_summ = count_summ(new_df)
+
 	# Добавление новой колонки и сохранение результата в файл
-	source['Summ'] = new_summ
+	new_df['Summ'] = new_summ
 	# source['Money'] = source['Quant'] * source['Price']
 	common_file = main_dir + new_dir + '\\' + new_name
-	source.to_csv(common_file, header=True, index=False, encoding='utf-8', sep=';')
+	new_df.to_csv(common_file, header=True, index=False, encoding='utf-8', sep=';')
 	split_to_files(common_file, tickers)
 	
 	
@@ -69,4 +76,9 @@ def split_to_files(file, stocks):
 if __name__ == '__main__':
 	name = input("Введите имя фала без расширения:\n")
 	name_file = os.path.abspath(name) + '.csv'
-	load_file(name_file)
+	if os.path.exists(name_file):
+		load_file(name_file)
+		print(f"Все сделано за участника {name}")
+	else:
+		print("Нет такого файла! Повтор!!!")
+
